@@ -111,7 +111,7 @@ def main():
             print("\n\nWhat do you want to know about the uploaded document?")
             query = input("Type in a query and press [enter] or type [exit]/[q] to quit.\n\n")
         else:
-            query = input("Type in another query and press [enter] or type [exit]/[q] to quit.\n\n")
+            query = input("\nType in another query and press [enter] or type [exit]/[q] to quit.\n\n")
         if query in ["exit", "q"]:
             print("Exiting program ...")
             vector_db.delete_collection()
