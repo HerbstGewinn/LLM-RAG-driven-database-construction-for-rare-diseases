@@ -14,7 +14,12 @@ Moin Leute, das Python Skript nutzt eine Kombination aus einer PDF-Vektor-Datenb
 
 Um das Programm auszuführen, benötigt ihr zunächst mindestens ein lokales LLM. Geht dafür auf [https://ollama.com/](https://ollama.com/) und ladet euch zunächst Ollama herunter, um die LLMs lokal auf euren Rechnern nutzen zu können. 
 
-Anschließend könnt ihr Ollama von der Kommandozeile aus nutzen, um llama Modelle lokal zu speichern und zu verwenden. Mit folgendem Befehl zieht ihr euch llama3.1 (Größe 4.7 GB):
+Anschließend könnt ihr Ollama von der Kommandozeile aus nutzen, um llama Modelle lokal zu speichern und zu verwenden. ALs erstes führt ihr folgenden Befehl aus, um ein Modell für das Embedding von Text herunterzuladen:
+
+```bash
+Ollama pull nomic-embed-text
+```
+Mit folgendem Befehl zieht ihr euch dann llama3.1 (Größe 4.7 GB):
 
 ```bash
 Ollama pull llama3.1
