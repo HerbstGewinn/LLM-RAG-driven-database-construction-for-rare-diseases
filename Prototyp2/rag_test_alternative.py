@@ -10,7 +10,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from langchain_ollama import OllamaEmbeddings
 from langchain_ollama import ChatOllama
-import getpass
+#import getpass
 from langchain_core.prompts import PromptTemplate
 
 def load_pdf(file_path):
@@ -27,12 +27,11 @@ def load_pdf(file_path):
         print(f"ERROR loading '{file_path}': {e}")
         sys.exit(1)
     
-    #text = ""
-    #for doc in document:
-    #    text += doc.page_content
-
-    #return text
-    return document
+    text = ""
+    for doc in document:
+        text += doc.page_content
+    return text
+    
 def splittext(text):
     text_splitter = RecursiveCharacterTextSplitter(
     chunk_size=500,
