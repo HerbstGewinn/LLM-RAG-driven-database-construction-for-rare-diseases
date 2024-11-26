@@ -52,9 +52,9 @@ class Fuzzy_Orpha_Mapper:
         return disease_names + synonym_names
 
     # Function to find matching OrphaCodes using fuzzy matching
-    def find_orpha_code(self, input_name, num_matches=5, similarity_threshold=60):
+    def find_orpha_code(self, input_name, similarity_threshold=60):
         # Fuzzy matching with RapidFuzz (returns the best num_matches)
-        matches = process.extract(input_name, self.all_names, limit=num_matches)
+        matches = process.extract(input_name, self.all_names)
 
         for match in matches:
             matched_name = match[0]
