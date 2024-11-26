@@ -2,7 +2,7 @@ from pdf_retriever import PDFRetriever
 import pandas as pd
 
 file_path = "test.pdf"  
-model = "llama3.2:latest"
+model = "llama3.1:70b"
 
 analyzer = PDFRetriever(file_path, model)
 analyzer.load_pdf()

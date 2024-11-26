@@ -11,10 +11,12 @@ from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 from typing import List
 import os
+import requests
+from dotenv import load_dotenv
 
 
-# Set environment variable for protobuf
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+
 
 
 class PDFRetriever:
@@ -29,6 +31,25 @@ class PDFRetriever:
         self.vector_db = None
         self.rag_chain = None
         self.document_text = None
+
+        load_dotenv()
+        user = os.getenv("ollama_user")
+        password = os.getenv("ollama_pw")
+
+        # Authentication details
+        protocol = "https"
+        hostname = "chat.cosy.bio"
+        host = f"{protocol}://{hostname}"
+        auth_url = f"{host}/api/v1/auths/signin"
+        self.api_url = f"{host}/ollama"
+        account = {
+            'email': user,
+            'password': password
+        }
+        auth_response = requests.post(auth_url, json=account)
+
+        jwt = auth_response.json()["token"]
+        self.headers = {"Authorization": "Bearer " + jwt}
 
     def load_pdf(self):
         """
@@ -47,7 +68,7 @@ class PDFRetriever:
 
         self.vector_db = Chroma.from_documents(
             documents=chunks,
-            embedding=OllamaEmbeddings(model="nomic-embed-text"),
+            embedding=OllamaEmbeddings(base_url=self.api_url, model="nomic-embed-text", client_kwargs={"headers": self.headers}),
             collection_name="local-rag"
         )
         print("\nVector database created successfully...")
@@ -59,7 +80,7 @@ class PDFRetriever:
         if not self.vector_db:
             raise RuntimeError("Vector database is not initialized. Call load_and_process_pdf first.")
    
-        llm = ChatOllama(model=self.model, temperature=0)
+        llm = ChatOllama(model=self.model, temperature=0, base_url=self.api_url, client_kwargs={"headers": self.headers})
        
         query_prompt = PromptTemplate(
             input_variables=["question"],
@@ -86,8 +107,7 @@ class PDFRetriever:
 
         prompt = PromptTemplate(
             template="""Answer the question based ONLY on the following context: 
-            {context}. Extract information about disease, treatment, 
-            and associated genes.\n{format_instructions}\n{question}\n""",
+            {context}. Provide an answer in the following JSON-Format:\n{format_instructions}\nQuestion:{question}\n""",
             input_variables=["question"],
             partial_variables={"format_instructions": parser.get_format_instructions()},
         )
