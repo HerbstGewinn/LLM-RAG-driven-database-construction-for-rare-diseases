@@ -8,9 +8,9 @@ Ergänze den folgenden code, sodass Quersumme richtig ausgegeben wird:
 def qsum(n):
     s = 0
     while n > 9:
-        """
         füge den code ein
-        """
+        fs += n % 10  
+        n //= 10    
     s += n
     print(s)
 
