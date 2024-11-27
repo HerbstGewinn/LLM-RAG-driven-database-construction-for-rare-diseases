@@ -23,7 +23,12 @@ Erstelle eine Funktion deiner Wahl im folgenden Abschnitt:
 """
 
 def alinas_function():
-    ...
+    word = ""
+    for i in range(5):
+        word += chr(65 + [0, 11, 8, 13, 0][i])
+    return word
+
+print(alinas_function())
 
 ##############
 ###Laurin#####
