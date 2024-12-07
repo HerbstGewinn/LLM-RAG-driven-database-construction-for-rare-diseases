@@ -100,17 +100,28 @@ class PDFRetriever:
         
         class DiseaseTreatmentInfo(BaseModel):
             disease: str = Field(description="The name of the disease")
-            treatment: str = Field(description="The suggested treatment")
+            treatment: List[str] = Field(description="List of suggested treatments")
             gene: List[str] = Field(description="List of associated genes")
 
         parser = JsonOutputParser(pydantic_object=DiseaseTreatmentInfo)
 
         prompt = PromptTemplate(
             template="""Answer the question based ONLY on the following context: 
-            {context}. Provide an answer in the following JSON-Format:\n{format_instructions}\nQuestion:{question}\n""",
-            input_variables=["question"],
-            partial_variables={"format_instructions": parser.get_format_instructions()},
-        )
+            {context}.
+            You MUST strictly follow this JSON format:
+            {{
+                "disease": "string",
+                "treatment": ["string"],
+                "gene": ["string"]
+            }}
+            DO NOT include any additional fields, explanations, or metadata. Just the JSON response.
+            Ensure all strings are properly escaped according to JSON syntax (e.g., special characters like quotes or apostrophes).
+
+            Question: {question}
+            """,
+                input_variables=["question"],
+                partial_variables={"format_instructions": parser.get_format_instructions()},
+            )
 
         self.rag_chain = (
             {"context": retriever, "question": RunnablePassthrough()}
