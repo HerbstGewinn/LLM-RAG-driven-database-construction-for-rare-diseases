@@ -40,6 +40,5 @@ Mache irgednwas mit der folgenden Matrix:
 
 zero_matrix = [[0 for i in range(10)] for j in range(10)]
 
-for i in range(10):
-    print(zero_matrix[i])
+"""test test test"""
 

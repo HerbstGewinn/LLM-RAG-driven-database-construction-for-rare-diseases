@@ -11,10 +11,12 @@ from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 from typing import List
 import os
+import requests
+from dotenv import load_dotenv
 
 
-# Set environment variable for protobuf
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+
 
 
 class PDFRetriever:
@@ -29,6 +31,25 @@ class PDFRetriever:
         self.vector_db = None
         self.rag_chain = None
         self.document_text = None
+
+        load_dotenv()
+        user = os.getenv("ollama_user")
+        password = os.getenv("ollama_pw")
+
+        # Authentication details
+        protocol = "https"
+        hostname = "chat.cosy.bio"
+        host = f"{protocol}://{hostname}"
+        auth_url = f"{host}/api/v1/auths/signin"
+        self.api_url = f"{host}/ollama"
+        account = {
+            'email': user,
+            'password': password
+        }
+        auth_response = requests.post(auth_url, json=account)
+
+        jwt = auth_response.json()["token"]
+        self.headers = {"Authorization": "Bearer " + jwt}
 
     def load_pdf(self):
         """
@@ -47,7 +68,7 @@ class PDFRetriever:
 
         self.vector_db = Chroma.from_documents(
             documents=chunks,
-            embedding=OllamaEmbeddings(model="nomic-embed-text"),
+            embedding=OllamaEmbeddings(base_url=self.api_url, model="nomic-embed-text", client_kwargs={"headers": self.headers}),
             collection_name="local-rag"
         )
         print("\nVector database created successfully...")
@@ -59,11 +80,11 @@ class PDFRetriever:
         if not self.vector_db:
             raise RuntimeError("Vector database is not initialized. Call load_and_process_pdf first.")
    
-        llm = ChatOllama(model=self.model, temperature=0)
+        llm = ChatOllama(model=self.model, temperature=0, base_url=self.api_url, client_kwargs={"headers": self.headers})
        
         query_prompt = PromptTemplate(
             input_variables=["question"],
-            template="""You are an AI language model assistant. Your task is to generate 2
+            template="""You are an AI language model assistant. Your task is to generate 3
             different versions of the given user question to retrieve relevant documents from
             a vector database. By generating multiple perspectives on the user question, your
             goal is to help the user overcome some of the limitations of the distance-based
@@ -79,18 +100,28 @@ class PDFRetriever:
         
         class DiseaseTreatmentInfo(BaseModel):
             disease: str = Field(description="The name of the disease")
-            treatment: str = Field(description="The suggested treatment")
+            treatment: List[str] = Field(description="List of suggested treatments")
             gene: List[str] = Field(description="List of associated genes")
 
         parser = JsonOutputParser(pydantic_object=DiseaseTreatmentInfo)
 
         prompt = PromptTemplate(
             template="""Answer the question based ONLY on the following context: 
-            {context}. Extract information about disease, treatment, 
-            and associated genes.\n{format_instructions}\n{question}\n""",
-            input_variables=["question"],
-            partial_variables={"format_instructions": parser.get_format_instructions()},
-        )
+            {context}.
+            You MUST strictly follow this JSON format:
+            {{
+                "disease": "string",
+                "treatment": ["string"],
+                "gene": ["string"]
+            }}
+            DO NOT include any additional fields, explanations, or metadata. Just the JSON response.
+            Ensure all strings are properly escaped according to JSON syntax (e.g., special characters like quotes or apostrophes).
+
+            Question: {question}
+            """,
+                input_variables=["question"],
+                partial_variables={"format_instructions": parser.get_format_instructions()},
+            )
 
         self.rag_chain = (
             {"context": retriever, "question": RunnablePassthrough()}
