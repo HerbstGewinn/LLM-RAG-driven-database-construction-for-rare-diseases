@@ -52,24 +52,34 @@ def complete_retrieval(llm_output, file_path):
 
 
 file_path = "C:/Users/Adrian/Desktop/Bioinformatik/Projekt/Treatbolome/test"
-#model = "qwen2.5:72b"
-model = "llama3.2:latest"
+model = "qwen2.5:72b"
+#model = "meditron:70b"
 
-initial_query = "What primary disease does the paper address? Classify it by type or subtype, if applicable."
+initial_query = """What primary disease does the paper address? 
+Classify it by type or subtype, if applicable. Exactly one answer is required, not several"""
 follow_up_querys = [
-          """The Paper addresses the following disease: {answer}. What treatment option(s) specifically linked to this 
-          are suggested? Ensure that the treatments are described with 
-          precision, avoiding vague terms like 'dietary supplementation' or 
-          'pharmaceutical therapy'. Provide detailed names of drugs, 
-          therapies, or other specific interventions""",
-          "The Paper addresses the following disease: {answer}.\n\nWhat gene(s) are linked to this disease?"
+          """The Paper addresses the following disease: {answer}. 
+          What primary treatment option(s) specifically associated with this disease 
+          are suggested in the paper? Ensure that the treatments are described with precision, 
+          avoiding vague terms like 'dietary supplementation' or 'pharmaceutical therapy'. 
+          Include a maximum of two treatment options. 
+          There is no need for additional information, besides the treatment option(s)""",
+          """The Paper addresses the following disease: {answer}. 
+          What gene(s) are directly associated with this disease according to the paper?
+          Ensure that only the gene(s) are extracted. 
+          There is no need for additional information, besides the gene(s)."""
           ]
+back_up_query = ""
 
 for file in os.listdir(file_path):
     output = dict()
     analyzer = initialize(file_path +"/"+ file, model)
     answer = analyzer.analyze_document(initial_query)
-    disease = ", ".join(item for item in answer)
+    if isinstance(answer, list):
+        disease = ", ".join(item for item in answer)
+    else:
+        disease = answer
+        answer = [answer]
     output["disease"] = answer
     treatment = analyzer.analyze_document(follow_up_querys[0].format(answer=disease))
     output["treatment"] = treatment
@@ -81,6 +91,8 @@ for file in os.listdir(file_path):
 
 test_data = pd.read_csv("test_db.csv")
 vali_data = pd.read_csv("validation_data.csv", sep=";")
+test_data['Study_identifier'] = test_data['Study_identifier'].astype(str)
+vali_data['Study_identifier'] = vali_data['Study_identifier'].astype(str)
 
 validate_db(test_data, vali_data)
 

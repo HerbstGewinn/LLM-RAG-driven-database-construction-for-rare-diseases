@@ -7,6 +7,7 @@ class GraphState(TypedDict):
     question : str #User question
     original_question : str #Original question in case query gets modified
     generation : list[str] #LLM generation 
+    #retriever_query : str #Query for the retriever 
     max_retries : int #Max number of retries for answer generation 
     loop_step : Annotated[int, operator.add]
     is_hallucinating : str #Status of current hallucination check
