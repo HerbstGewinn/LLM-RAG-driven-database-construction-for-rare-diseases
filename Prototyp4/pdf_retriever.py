@@ -16,7 +16,6 @@ import json
 import os
 import requests
 from dotenv import load_dotenv
-from IPython.display import Image, display
 
 
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
@@ -282,9 +281,9 @@ class PDFRetriever:
         #    retriever_query = query
         graph = self.workflow.compile()
         # Graph speichern
-        image_data = graph.get_graph().draw_mermaid_png()
-        with open("graph.png", "wb") as f:
-            f.write(image_data)
+        #image_data = graph.get_graph().draw_mermaid_png()
+        #with open("graph.png", "wb") as f:
+            #f.write(image_data)
         inputs = {"question" : query, 
                   "original_question" : query, 
                   #"retriever_query" : retriever_query,
