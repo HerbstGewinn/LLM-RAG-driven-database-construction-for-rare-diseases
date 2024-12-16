@@ -10,8 +10,9 @@ def validate_db(test_data, vali_data, output_file="output.txt"):
             output.append(f"\nStudy Identifier: {identifier}")
             output.append("=" * 50)
             
-            test_rows = test_data[test_data['Study_identifier'] == identifier].drop(columns=['Study_identifier'])
             vali_rows = vali_data[vali_data['Study_identifier'] == identifier].drop(columns=['Study_identifier'])
+            test_rows = test_data[test_data['Study_identifier'] == identifier].drop(columns=['Study_identifier'])
+            test_rows = test_rows[vali_rows.columns]
             
             output.append("Test Data:")
             if not test_rows.empty:
