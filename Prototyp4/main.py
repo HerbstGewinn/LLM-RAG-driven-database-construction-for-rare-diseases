@@ -6,6 +6,7 @@ import pandas as pd
 import re
 import sys
 import os
+import argparse
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -15,7 +16,7 @@ def initialize(file_path, embedding_model, model):
     analyzer.initialize_chain(model)
     return analyzer
 
-def map_metadata(llm_output, file_path, llm):
+def map_metadata(llm_output, file_path, analyzer, llm):
         
     ##Study metadata##
     study_id = re.search(r".*/(.+)\.pdf", file_path)
@@ -86,55 +87,73 @@ def complete_retrieval(llm_output):
     df.to_csv(csv_file_path, index=False)
     print("\n---RETRIEVAL SAVED SUCCESSFULLY---\n")
 
+def main():
+    parser = argparse.ArgumentParser(description="Program for document (pdf) analysis with different LLMs.")
+    # Choose model
+    parser.add_argument(
+        '-m','--model', 
+        type=str, 
+        default="qwen2.5:72b",
+        help="Which model do you want to use? (Standard: qwen2.5:72b)"
+    )
+    # Choose file
+    parser.add_argument(
+        '-f','--file', 
+        type=str, 
+        required=True,
+        help="Path to PDF - directory. Example: C:/Users/Desktop/PDF_folder"
+    )
 
-file_path = "C:/Users/Adrian/Desktop/Bioinformatik/Projekt/Treatbolome/test1"
+    args = parser.parse_args()
+    file_path = args.file
+    model = args.model
 
-initial_query = """What primary disease does the paper address? 
-Classify it by type or subtype, if applicable. Exactly one answer is required, not several"""
-follow_up_querys = [
-          """The Paper addresses the following disease: {answer}. 
-          What primary treatment option(s) specifically associated with this disease 
-          are suggested in the paper? Ensure that the treatments are described with precision, 
-          avoiding vague terms like 'dietary supplementation' or 'pharmaceutical therapy'. 
-          Include a maximum of two treatment options. 
-          There is no need for additional information, besides the treatment option(s)""",
-          """The Paper addresses the following disease: {answer}. 
-          What gene(s) are directly associated with this disease according to the paper?
-          Ensure that only the gene(s) are extracted. 
-          There is no need for additional information, besides the gene(s)."""
-          ]
+    initial_query = """What primary disease does the paper address? 
+    Classify it by type or subtype, if applicable. Exactly one answer is required, not several"""
+    follow_up_querys = [
+            """The Paper addresses the following disease: {answer}. 
+            What primary treatment option(s) specifically associated with this disease 
+            are suggested in the paper? Ensure that the treatments are described with precision, 
+            avoiding vague terms like 'dietary supplementation' or 'pharmaceutical therapy'. 
+            Include a maximum of two treatment options. 
+            There is no need for additional information, besides the treatment option(s)""",
+            """The Paper addresses the following disease: {answer}. 
+            What gene(s) are directly associated with this disease according to the paper?
+            Ensure that only the gene(s) are extracted. 
+            There is no need for additional information, besides the gene(s)."""
+            ]
 
-model="qwen2.5:72b"
+    api_url, headers = establish_server_connection()
+    retrieve_llm = get_llm(api_url, headers, model=model)
+    mapping_llm = get_llm(api_url, headers)
+    embedding_model = get_embedding_model(api_url, headers)
 
-api_url, headers = establish_server_connection()
-retrieve_llm = get_llm(api_url, headers, model=model)
-mapping_llm = get_llm(api_url, headers)
-embedding_model = get_embedding_model(api_url, headers)
+    for file in os.listdir(file_path):
+        output = dict()
+        analyzer = initialize(file_path +"/"+ file, embedding_model, retrieve_llm)
+        answer = analyzer.analyze_document(initial_query)
+        if isinstance(answer, list):
+            disease = ", ".join(item for item in answer)
+        else:
+            disease = answer
+            answer = [answer]
+        output["disease"] = answer
+        treatment = analyzer.analyze_document(follow_up_querys[0].format(answer=disease))
+        output["treatment"] = treatment
+        gene = analyzer.analyze_document(follow_up_querys[1].format(answer=disease))
+        output["gene"] = gene
+        print(f"\n{model} final response: {output}")
+        print("\nExtracting metadata...")
+        map_metadata(output, file_path +"/"+ file, analyzer, mapping_llm)
+        analyzer.delete_db()
+        complete_retrieval(output)
 
-for file in os.listdir(file_path):
-    output = dict()
-    analyzer = initialize(file_path +"/"+ file, embedding_model, retrieve_llm)
-    answer = analyzer.analyze_document(initial_query)
-    if isinstance(answer, list):
-        disease = ", ".join(item for item in answer)
-    else:
-        disease = answer
-        answer = [answer]
-    output["disease"] = answer
-    treatment = analyzer.analyze_document(follow_up_querys[0].format(answer=disease))
-    output["treatment"] = treatment
-    gene = analyzer.analyze_document(follow_up_querys[1].format(answer=disease))
-    output["gene"] = gene
-    print(f"\n{model} final response: {output}")
-    print("\nExtracting metadata...")
-    map_metadata(output, file_path +"/"+ file, mapping_llm)
-    analyzer.delete_db()
-    complete_retrieval(output)
+    test_data = pd.read_csv("test_db.csv")
+    vali_data = pd.read_csv("validation_data.csv", sep=";")
+    test_data['Study_identifier'] = test_data['Study_identifier'].astype(str)
+    vali_data['Study_identifier'] = vali_data['Study_identifier'].astype(str)
 
-test_data = pd.read_csv("test_db.csv")
-vali_data = pd.read_csv("validation_data.csv", sep=";")
-test_data['Study_identifier'] = test_data['Study_identifier'].astype(str)
-vali_data['Study_identifier'] = vali_data['Study_identifier'].astype(str)
+    validate_db(test_data, vali_data)
 
-validate_db(test_data, vali_data)
-
+if __name__ == "__main__":
+    main()
