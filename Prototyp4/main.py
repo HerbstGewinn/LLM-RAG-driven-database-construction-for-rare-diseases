@@ -1,21 +1,21 @@
 from pdf_retriever import PDFRetriever
+from llm_access import establish_server_connection, get_llm, get_embedding_model
 from mapping import get_chemi_id, get_orpha_code
 from validation import validate_db
 import pandas as pd
 import re
 import sys
 import os
-#from langchain.agents import Tool
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-def initialize(file_path, model):
-    analyzer = PDFRetriever(file_path, model)
-    analyzer.load_pdf()
-    analyzer.initialize_chain()
+def initialize(file_path, embedding_model, model):
+    analyzer = PDFRetriever(file_path)
+    analyzer.load_pdf(embedding_model)
+    analyzer.initialize_chain(model)
     return analyzer
 
-def complete_retrieval(llm_output, file_path):
+def complete_retrieval(llm_output, file_path, llm):
         
     csv_file_path = "test_db.csv"
     try:
@@ -34,7 +34,7 @@ def complete_retrieval(llm_output, file_path):
 
     chemi_id = list()
     for treatment in llm_output["treatment"]:
-       chemi_id.append(get_chemi_id(treatment))
+       chemi_id.append(get_chemi_id(treatment, llm))
 
     new_row = {
         "Study_identifier": study_id.group(1) if study_id else "None",
@@ -48,12 +48,10 @@ def complete_retrieval(llm_output, file_path):
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
     df.to_csv(csv_file_path, index=False)
-    print("\nRetrieval saved successfully.")
+    print("\n---RETRIEVAL SAVED SUCCESSFULLY---\n")
 
 
 file_path = "C:/Users/Adrian/Desktop/Bioinformatik/Projekt/Treatbolome/test"
-model = "qwen2.5:72b"
-#model = "meditron:70b"
 
 initial_query = """What primary disease does the paper address? 
 Classify it by type or subtype, if applicable. Exactly one answer is required, not several"""
@@ -69,11 +67,17 @@ follow_up_querys = [
           Ensure that only the gene(s) are extracted. 
           There is no need for additional information, besides the gene(s)."""
           ]
-back_up_query = ""
+
+model="qwen2.5:72b"
+
+api_url, headers = establish_server_connection()
+retrieve_llm = get_llm(api_url, headers, model=model)
+mapping_llm = get_llm(api_url, headers)
+embedding_model = get_embedding_model(api_url, headers)
 
 for file in os.listdir(file_path):
     output = dict()
-    analyzer = initialize(file_path +"/"+ file, model)
+    analyzer = initialize(file_path +"/"+ file, embedding_model, retrieve_llm)
     answer = analyzer.analyze_document(initial_query)
     if isinstance(answer, list):
         disease = ", ".join(item for item in answer)
@@ -87,7 +91,7 @@ for file in os.listdir(file_path):
     output["gene"] = gene
     analyzer.delete_db()
     print(f"\n{model} final response: {output}")
-    complete_retrieval(output, file_path +"/"+ file)
+    complete_retrieval(output, file_path +"/"+ file, mapping_llm)
 
 test_data = pd.read_csv("test_db.csv")
 vali_data = pd.read_csv("validation_data.csv", sep=";")

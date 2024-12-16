@@ -1,12 +1,8 @@
 from pdfminer.high_level import extract_text
 from langchain.docstore.document import Document
-from langchain_ollama import OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
-from langchain.prompts import PromptTemplate
-from langchain_ollama.chat_models import ChatOllama
 from langchain.retrievers.multi_query import MultiQueryRetriever
-from langchain.chains import LLMChain
 #from langchain_core.output_parsers import JsonOutputParser
 #from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -14,17 +10,13 @@ from langgraph.graph import StateGraph, START, END
 from graph_state import GraphState
 import json
 import os
-import requests
-from dotenv import load_dotenv
-
 
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
 class PDFRetriever:
-    def __init__(self, file_path, model="llama3.2:latest", chunk_size=1000, chunk_overlap=200):
+    def __init__(self, file_path, chunk_size=1000, chunk_overlap=200):
         
         self.file_path = file_path
-        self.model = model
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.vector_db = None
@@ -54,26 +46,7 @@ class PDFRetriever:
         )
         
 
-        load_dotenv()
-        user = os.getenv("ollama_user")
-        password = os.getenv("ollama_pw")
-
-        # Authentication details
-        protocol = "https"
-        hostname = "chat.cosy.bio"
-        host = f"{protocol}://{hostname}"
-        auth_url = f"{host}/api/v1/auths/signin"
-        self.api_url = f"{host}/ollama"
-        account = {
-            'email': user,
-            'password': password
-        }
-        auth_response = requests.post(auth_url, json=account)
-
-        jwt = auth_response.json()["token"]
-        self.headers = {"Authorization": "Bearer " + jwt}
-
-    def load_pdf(self):
+    def load_pdf(self, embedding_model):
        
         try:
             self.document_text = extract_text(self.file_path)
@@ -91,27 +64,17 @@ class PDFRetriever:
 
         self.vector_db = Chroma.from_documents(
             documents=chunks,
-            embedding=OllamaEmbeddings(base_url=self.api_url, 
-                                       model="nomic-embed-text", 
-                                       client_kwargs={"headers": self.headers}),
+            embedding=embedding_model,
             collection_name="local-rag"
         )
         print("---VECTOR DATABASE CREATED SUCCESSFULLY---")
 
-    def get_llm(self, model, format="json"):
-        return ChatOllama(model=model, temperature=0, 
-                          base_url=self.api_url, 
-                          client_kwargs={"headers": self.headers}, 
-                          format=format,
-                          num_ctx=25000)
-
-    def initialize_chain(self):
+    def initialize_chain(self, llm):
        
         if not self.vector_db:
             raise RuntimeError("Vector database is not initialized. Call load_and_process_pdf first.")
    
-        #self.standard_llm = self.get_llm(model="llama3.2:latest", format="json")
-        self.custom_llm = self.get_llm(model=self.model, format="json")
+        self.custom_llm = llm
        
         self.retriever = MultiQueryRetriever.from_llm(
             retriever=self.vector_db.as_retriever(),
@@ -260,7 +223,6 @@ class PDFRetriever:
             """
 
         print("\nProcessing your query, please wait...")
-        #retriever_query = state["retriever_query"]
         query = state["question"]
         loop_step = state.get("loop_step", 0)
         docs = self.retriever.invoke(query)
@@ -277,8 +239,6 @@ class PDFRetriever:
         }
 
     def analyze_document(self, query):
-        #if not retriever_query:
-        #    retriever_query = query
         graph = self.workflow.compile()
         # Graph speichern
         #image_data = graph.get_graph().draw_mermaid_png()
@@ -286,7 +246,6 @@ class PDFRetriever:
             #f.write(image_data)
         inputs = {"question" : query, 
                   "original_question" : query, 
-                  #"retriever_query" : retriever_query,
                   "max_retries" : 3}    
         for event in graph.stream(inputs, stream_mode="values"):
             current_state = event
