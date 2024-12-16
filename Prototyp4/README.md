@@ -17,7 +17,7 @@ This project implements a Retrieval-Augmented Generation (RAG) pipeline designed
    - Extracts and maps publication metadata (e.g., DOI, authors, journal name) and disease-related information like ORDO codes and ChEBI IDs.
 
 4. **Validation Pipeline**:
-   - Ensures answers align with the facts from the document and validates extracted metadata for correctness.
+   - Ensures answers align with the facts from the document and validates extracted metadata for correctness (see `graph.png`).
 
 5. **Dynamic Query Adjustment**:
    - Automatically adjusts queries in case of hallucinations or invalid answers.
