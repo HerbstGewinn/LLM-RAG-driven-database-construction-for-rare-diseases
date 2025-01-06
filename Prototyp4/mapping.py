@@ -1,4 +1,4 @@
-from fuzzy_orpha_mapper import Fuzzy_Orpha_Mapper
+from bert_orpha_mapper import Bert_Orpha_Mapper
 from bioservices import ChEBI
 from Bio import Entrez, Medline
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -129,7 +129,7 @@ def get_chemi_id(treatment, llm):
         return None
 
 def get_orpha_code(disease):
-    disease_processor = Fuzzy_Orpha_Mapper('en_product1.json')
+    disease_processor = Bert_Orpha_Mapper('en_product1.json')
 
     orpha_code = disease_processor.find_orpha_code(disease)
 

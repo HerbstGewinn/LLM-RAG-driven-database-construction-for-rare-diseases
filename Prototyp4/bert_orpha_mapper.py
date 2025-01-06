@@ -1,12 +1,16 @@
 import json
-from rapidfuzz import process
+import re
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
 
-class Fuzzy_Orpha_Mapper:
-    def __init__(self, input_file):
+class Bert_Orpha_Mapper:
+    def __init__(self, input_file, model_name='all-MiniLM-L6-v2'):
         self.context_data = self.load_json_file(input_file)
         self.simplified_context = self.simplify_data()
         self.diseases_data = self.simplified_context
         self.all_names = self.get_all_names()
+        self.model = SentenceTransformer(model_name)
+        self.embeddings = self.embed_names(self.all_names)
 
     # Function to load the JSON file
     def load_json_file(self, file_path):
@@ -18,14 +22,23 @@ class Fuzzy_Orpha_Mapper:
         with open(output_path, 'w', encoding='utf-8') as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
 
-    # Simplifying the JSON data
+    # Preprocessing of names
+    def preprocess_name(self, name):
+        """Removes stopwords, special characters, and handles case insensitivity."""
+        stopwords = {"disease", "syndrome", "disorder", "type", "form", "variant"}
+        name = re.sub(r"[^\w\s]", "", name)  # Remove special characters
+        words = name.split()
+        filtered_words = [word for word in words if word.lower() not in stopwords]  # Remove stopwords
+        return " ".join(filtered_words).lower()
+
+    # Simplify the JSON data
     def simplify_data(self):
         simplified_context = []
         try:
             for disorder in self.context_data["JDBOR"][0]["DisorderList"][0]["Disorder"]:
                 disorder_data = {
                     "name": disorder["Name"][0]["label"],
-                    "OrphaCode": disorder["OrphaCode"]
+                    "OrphaCode": str(disorder["OrphaCode"]).strip()
                 }
 
                 # Extract synonyms if available
@@ -45,47 +58,51 @@ class Fuzzy_Orpha_Mapper:
             print(f"IndexError: {e} - Please check if the lists contain the expected elements.")
         return []
 
-    # Extract disease names and synonyms
+    # Extract all disease names and synonyms
     def get_all_names(self):
         disease_names = [entry['name'] for entry in self.diseases_data]
         synonym_names = [synonym for entry in self.diseases_data if "Synonyms" in entry for synonym in entry["Synonyms"]]
         return disease_names + synonym_names
 
-    # Function to find matching OrphaCodes using fuzzy matching
-    def find_orpha_code(self, input_name, similarity_threshold=60):
-        # Fuzzy matching with RapidFuzz (returns the best num_matches)
-        matches = process.extract(input_name, self.all_names)
+    # Generate embeddings for all names
+    def embed_names(self, names):
+        preprocessed_names = [self.preprocess_name(name) for name in names]
+        return self.model.encode(preprocessed_names)
 
-        for match in matches:
-            matched_name = match[0]
-            similarity_score = match[1]
-            
-            # If the similarity score is below the threshold, skip the match
-            if similarity_score < similarity_threshold:
+    # Find OrphaCodes using embedding-based matching
+    def find_orpha_code(self, input_name, similarity_threshold=0.6):
+        input_name_preprocessed = self.preprocess_name(input_name)
+        input_embedding = self.model.encode([input_name_preprocessed])
+
+        # Compute similarities
+        similarities = cosine_similarity(input_embedding, self.embeddings)
+        similarity_scores = list(zip(self.all_names, similarities[0]))
+
+        # Sort results and find the best match
+        sorted_scores = sorted(similarity_scores, key=lambda x: x[1], reverse=True)
+
+        for matched_name, score in sorted_scores:
+            if score < similarity_threshold:
                 continue
-            
+
             # Find the entry for the matched name
             matched_entry = next(
-                (item for item in self.diseases_data if item["name"] == matched_name), 
+                (item for item in self.diseases_data if item["name"] == matched_name),
                 None
             )
-            
+
             if not matched_entry:
                 matched_entry = next(
-                    (item for item in self.diseases_data if "Synonyms" in item and matched_name in item["Synonyms"]), 
+                    (item for item in self.diseases_data if "Synonyms" in item and matched_name in item["Synonyms"]),
                     None
                 )
-            
+
             if matched_entry:
-                # Output in the desired format
                 if "Synonyms" in matched_entry and matched_name in matched_entry["Synonyms"]:
                     synonym = matched_name
                     main_name = matched_entry["name"]
-                    # Return: OrphaCode, main name, synonym (if available)
-                    return {"OrphaCode" : matched_entry['OrphaCode'], "Name" : main_name, "Synonym" : synonym}
-                
-                # If no synonym matched, return only the main name and OrphaCode
-                return {"OrphaCode" : matched_entry['OrphaCode'], "Name" : matched_name}
-        
-        # If no match is found, return None
+                    return {"OrphaCode": matched_entry['OrphaCode'], "Name": main_name, "Synonym": synonym}
+
+                return {"OrphaCode": matched_entry['OrphaCode'], "Name": matched_name}
+
         return None
