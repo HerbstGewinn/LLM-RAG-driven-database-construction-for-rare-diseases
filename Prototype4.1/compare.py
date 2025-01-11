@@ -1,5 +1,5 @@
 import csv
-from tabulate import tabulate
+#from tabulate import tabulate
 
 # Dateien einlesen
 def read_csv(file_path, delimiter=','):

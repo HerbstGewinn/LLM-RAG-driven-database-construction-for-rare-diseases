@@ -8,11 +8,27 @@ from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
 from graph_state import GraphState
+import threading
 import json
 import os
-from sentence_transformers import CrossEncoder
+#from sentence_transformers import CrossEncoder
 
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+
+class InvokeWithTimeout(threading.Thread):
+    def __init__(self, target, args=(), kwargs=None):
+        super().__init__()
+        self.target = target
+        self.args = args
+        self.kwargs = kwargs or {}
+        self.result = None
+        self.exception = None
+
+    def run(self):
+        try:
+            self.result = self.target(*self.args, **self.kwargs)
+        except Exception as e:
+            self.exception = e
 
 class PDFRetriever:
     def __init__(self, file_path, chunk_size=1000, chunk_overlap=200):
@@ -23,6 +39,7 @@ class PDFRetriever:
         self.vector_db = None
         self.document_text = None
         self.retriever = None
+        self.doc_txt = None
         #self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2') 
         self.workflow = StateGraph(GraphState)
 
@@ -43,6 +60,7 @@ class PDFRetriever:
                 "hallucination" : "adjust_query",
                 "not valid" : "adjust_query",
                 "max retries" : END,
+                "timeout" : END,
             },
         )
         
@@ -83,12 +101,23 @@ class PDFRetriever:
         
         print("---RETRIEVAL INITIALIZED SUCCESSFULLY---")
 
+    def invoke_with_timeout(self, func, timeout, *args, **kwargs):
+        thread = InvokeWithTimeout(target=func, args=args, kwargs=kwargs)
+        thread.start()
+        thread.join(timeout)
+        if thread.is_alive():
+            raise TimeoutError("Operation timed out")
+        if thread.exception:
+            raise thread.exception
+        return thread.result
+
     def format_docs(self, docs):
         return "\n\n".join(doc.page_content for doc in docs)
     
     def delete_db(self):
-        self.vector_db.delete_collection()
-        print("\n---VECTOR DATABASE DELETED SUCCESSFULLY---")
+        if self.vector_db:
+            self.vector_db.delete_collection()
+            print("\n---VECTOR DATABASE DELETED SUCCESSFULLY---")
 
     def adjust_query(self, state):
         return {"question" : f"""Original question: {state["original_question"]} 
@@ -106,6 +135,9 @@ class PDFRetriever:
             """}
     
     def evaluate_answer(self, state):
+
+        if state["timeout"]:
+            return
         
         instructions = """
         You are an impartial evaluator tasked with:
@@ -176,6 +208,9 @@ class PDFRetriever:
         }
     
     def evaluate_state(self, state):
+
+        if state["timeout"]:
+            return "timeout"
        
         max_retries = state.get("max_retries", 3)
         for key in ["is_hallucinating", "is_valid"]:
@@ -226,7 +261,18 @@ class PDFRetriever:
         print("\nProcessing your query, please wait...")
         query = state["question"]
         loop_step = state.get("loop_step", 0)
-        docs = self.retriever.invoke(query)
+        docs = None
+        try:
+            docs = self.invoke_with_timeout(self.retriever.invoke, 100, query)
+            print("---RELEVANT CHUNKS EXTRACTED---")
+        except TimeoutError:
+            print("---TIMEOUT OCCURRED---")
+            return {
+                "timeout": True,
+                "generation":"timeout"
+            }
+        except Exception as e:
+            print(f"---AN ERROR OCCURRED: {e}")
         '''
         #Reranker
         doc_texts = [doc.page_content for doc in docs]
@@ -243,15 +289,29 @@ class PDFRetriever:
         '''
         self.doc_txt = self.format_docs(docs)
         rag_prompt_formatted = rag_prompt.format(context=self.doc_txt, question=query)
-        generation = self.custom_llm.invoke([HumanMessage(content=rag_prompt_formatted)])
-        generation_content = json.loads(generation.content)
-        answer = generation_content["answer"]
+        try:
+            generation = self.invoke_with_timeout(self.custom_llm.invoke, 60, [HumanMessage(content=rag_prompt_formatted)])
+        except TimeoutError:
+            print("---TIMEOUT OCCURRED---")
+            return {
+                "timeout": True,
+                "generation":"timeout"
+            }
+        except Exception as e:
+            print(f"---AN ERROR OCCURRED: {e}")
+        try:
+            generation_content = json.loads(generation.content)
+            answer = generation_content["answer"]
+        except:
+            answer = "Error: Answer not in JASON - Format"
 
         print(f"\nCurrent answer: {answer}")
         return {
             "generation": answer,
-            "loop_step": loop_step + 1
+            "loop_step": loop_step + 1,
+            "timeout": False
         }
+     
 
     def analyze_document(self, query):
         graph = self.workflow.compile()

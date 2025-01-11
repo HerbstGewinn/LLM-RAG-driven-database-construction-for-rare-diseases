@@ -13,3 +13,4 @@ class GraphState(TypedDict):
     is_hallucinating : str #Status of current hallucination check
     is_valid : str #Status of answer validation check 
     current_explanation : str #Current explanation for lack of quality
+    timeout : bool #Did a timeout occur?

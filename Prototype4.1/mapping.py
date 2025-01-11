@@ -28,8 +28,11 @@ def extract_metadata(doc, llm, instructions):
     answer = llm.invoke(
             [SystemMessage(content=instructions)] + [HumanMessage(content=prompt)]
         )
-    answer_content = json.loads(answer.content)
-    return answer_content
+    try:
+        answer_content = json.loads(answer.content)
+        return answer_content
+    except:
+        return {}
 
 def extract_missing_metadata(doc, llm, instructions):
     prompt = f"""
@@ -138,13 +141,17 @@ def get_chemi_id(treatment, llm):
     You MUST strictly follow this JSON format:
     {{"substance" : "string"}}
     """
-    answer = llm.invoke(
-            [SystemMessage(content=instructions)] + [HumanMessage(content=treatment)]
-        )
-    answer_content = json.loads(answer.content)
-    print(f"---EXTRACTED TREATMENT SUBSTANCE: {answer_content["substance"]}---")
-    if answer_content["substance"] == "None": 
-        return None
+    try:
+        answer = llm.invoke(
+                [SystemMessage(content=instructions)] + [HumanMessage(content=treatment)]
+            )
+        
+        answer_content = json.loads(answer.content)
+        print(f"---EXTRACTED TREATMENT SUBSTANCE: {answer_content["substance"]}---")
+        if answer_content["substance"] == "None": 
+            return None
+    except:
+        answer_content = {"substance" : treatment}
     
     chebi = ChEBI()
 
@@ -180,7 +187,6 @@ def get_chemi_id(treatment, llm):
 
 
     else:
-        print("No results found.")
         return None
 
 def get_orpha_code(disease):
