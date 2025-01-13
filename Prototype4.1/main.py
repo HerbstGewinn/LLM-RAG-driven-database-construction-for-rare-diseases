@@ -20,13 +20,16 @@ def load_progress(file_name):
     if os.path.exists(file_name):
         with open(file_name, "r") as file:
             return json.load(file)
-    return {"current_file": None, "restarts" : 0}
+    return {"current_file": None, "restarts" : 0, "output" : {}}
 
 def restart_script(progress):
     progress["restarts"] += 1
     save_progress(STATE_FILE, progress)
     print("\nScript is restarted with current pdf...\n")
     python = sys.executable
+    for idx, arg in enumerate(sys.argv):
+        if arg == "-p" or arg == "--progression":
+            sys.argv[idx + 1] = "True"
     os.execl(python, python, *sys.argv)
 
 def initialize_server(model):
@@ -41,6 +44,18 @@ def initialize_retriever(file_path, embedding_model, model):
     analyzer.load_pdf(embedding_model)
     analyzer.initialize_chain(model)
     return analyzer
+
+def extract_information(analyzer, query, key, output, progress, restart_message):
+    
+    if key not in output:  
+        answer = analyzer.analyze_document(query)
+        if answer == "timeout":
+            print(restart_message)
+            analyzer.delete_db()
+            progress["output"] = output
+            restart_script(progress)
+        output[key] = answer
+    return output[key]
 
 def map_metadata(llm_output, file_path, analyzer, llm):
         
@@ -151,13 +166,23 @@ def main():
         required=True,
         help="Path to PDF - directory. Example: C:/Users/Desktop/PDF_folder"
     )
+    parser.add_argument(
+        '-p','--progression', 
+        type=str, 
+        default="True",
+        help="""Can be either set to True or False. 
+        True: Continuation with the PDF - document at which the program last stopped.
+        False: Starting from the first PDF - document in input directory."""
+    )
 
     args = parser.parse_args()
     file_path = args.file
     model = args.model
+    keep_progress = args.progression
 
     initial_query = """What is the single primary disease addressed in the paper?
-    Keep the answer concise and limited to the disease name with its type or subtype, written in full, without any additional details, descriptions, or classifications."""
+    Keep the answer concise and limited to the disease name with its type or subtype, 
+    written in full, without any additional details, descriptions, or classifications."""
 
     follow_up_querys = [
             """The Paper addresses the following disease: {answer}. 
@@ -173,52 +198,76 @@ def main():
             ]
 
     retrieve_llm, mapping_llm, embedding_model = initialize_server(model)
-    progress = load_progress(STATE_FILE)
-    start_index = os.listdir(file_path).index(progress["current_file"]) + 1 if progress["current_file"] else 0
+    file_list = os.listdir(file_path)
+    if keep_progress == "False":
+        progress = {"current_file": None, "restarts" : 0, "output" : {}}
+    else:
+        progress = load_progress(STATE_FILE)
+        if progress["current_file"] and progress["current_file"] not in file_list:
+            progress = {"current_file": None, "restarts" : 0, "output" : {}}
+
+    start_index = file_list.index(progress["current_file"]) + 1 if progress["current_file"] else 0
 
     if progress["restarts"] == MAX_RESTARTS:
         print("---MAXIMUM RESTARTS REACHED---")
-        output = dict()
-        analyzer = initialize_retriever(file_path +"/"+ os.listdir(file_path)[start_index], embedding_model, retrieve_llm)
-        map_metadata(output, file_path +"/"+ os.listdir(file_path)[start_index], analyzer, mapping_llm)
+        output = progress["output"]
+        analyzer = initialize_retriever(file_path +"/"+ file_list[start_index], embedding_model, retrieve_llm)
+        map_metadata(output, file_path +"/"+ file_list[start_index], analyzer, mapping_llm)
         analyzer.delete_db()
         complete_retrieval(output)
         print("move on to the next pdf...")
         progress["restarts"] = 0
+        progress["output"] = {}
         start_index += 1 
-        if start_index < len(os.listdir(file_path)):
-            progress["current_file"] = os.listdir(file_path)[start_index]
+        if start_index < len(file_list):
+            progress["current_file"] = file_list[start_index]
 
-    for file in os.listdir(file_path)[start_index:]:
-        output = dict()
-        analyzer = initialize_retriever(file_path +"/"+ file, embedding_model, retrieve_llm) #After Server Timeout it must be reinitialized  
-        answer = analyzer.analyze_document(initial_query)
-        if answer == "timeout": #Answer for disease is mandatory to proceed
-            print("---DISEASE INFORMATION COULD NOT BE EXTRACTED---")
-            analyzer.delete_db()
-            restart_script(progress)
-       
-        if isinstance(answer, list):
-            disease = ", ".join(item for item in answer)
-        else:
-            disease = answer
-            answer = [answer]
-            
-        output["disease"] = answer
-        treatment = analyzer.analyze_document(follow_up_querys[0].format(answer=disease))
-        if treatment == "timeout":
-            print("---TREATMENT INFORMATION COULD NOT BE EXTRACTED---")
-            analyzer.delete_db()
-            restart_script(progress)
+    for file in file_list[start_index:]:
+        # Initialize output and analyzer
+        output = progress.get("output", {})
+        analyzer = initialize_retriever(file_path + "/" + file, embedding_model, retrieve_llm)
         
+        # Extract "disease"
+        disease = extract_information(
+            analyzer,
+            query=initial_query,
+            key="disease",
+            output=output,
+            progress=progress,
+            restart_message="---DISEASE INFORMATION COULD NOT BE EXTRACTED---"
+        )
+        
+        # Konvert "disease" in a list format (if necessary)
+        if isinstance(disease, list):
+            disease_str = ", ".join(disease)
+        else:
+            disease_str = disease
+            disease = [disease]
+        
+        output["disease"] = disease
+        
+        # Extract "treatment"
+        treatment = extract_information(
+            analyzer,
+            query=follow_up_querys[0].format(answer=disease_str),
+            key="treatment",
+            output=output,
+            progress=progress,
+            restart_message="---TREATMENT INFORMATION COULD NOT BE EXTRACTED---"
+        )
         output["treatment"] = treatment
-        gene = analyzer.analyze_document(follow_up_querys[1].format(answer=disease))
-        if gene == "timeout":
-            print("---TREATMENT INFORMATION COULD NOT BE EXTRACTED---")
-            analyzer.delete_db()
-            restart_script(progress)
-
+        
+        # Extract "gene"
+        gene = extract_information(
+            analyzer,
+            query=follow_up_querys[1].format(answer=disease_str),
+            key="gene",
+            output=output,
+            progress=progress,
+            restart_message="---GENE INFORMATION COULD NOT BE EXTRACTED---"
+        )
         output["gene"] = gene
+
         print(f"\n{model} final response: {output}")
         print("\nExtracting metadata...")
         map_metadata(output, file_path +"/"+ file, analyzer, mapping_llm)
@@ -226,11 +275,13 @@ def main():
         complete_retrieval(output)
         progress["current_file"] = file
         progress["restarts"] = 0
-        save_progress(STATE_FILE, progress)  # Fortschritt speichern
+        progress["output"] = {}
+        save_progress(STATE_FILE, progress)  # Save progress
 
     #Reset Progress File
     progress["current_file"] = None
     progress["restarts"] = 0
+    progress["output"] = {}
     save_progress(STATE_FILE, progress)
 
     test_data = pd.read_csv("test_db.csv")
@@ -242,3 +293,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+   
