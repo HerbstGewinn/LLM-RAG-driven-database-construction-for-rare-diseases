@@ -39,9 +39,9 @@ def initialize_server(model):
     embedding_model = get_embedding_model(api_url, headers)
     return retrieve_llm, mapping_llm, embedding_model
 
-def initialize_retriever(file_path, embedding_model, model):
+def initialize_retriever(file_path, embedding_model, model, keep_references):
     analyzer = PDFRetriever(file_path)
-    analyzer.load_pdf(embedding_model)
+    analyzer.load_pdf(embedding_model, keep_references)
     analyzer.initialize_chain(model)
     return analyzer
 
@@ -111,10 +111,12 @@ def map_metadata(llm_output, file_path, analyzer, llm):
 
     ##ChEBI ID##
     if "treatment" in llm_output:
-        chemi_id = list()
+        chebi = list()
         for treatment in llm_output["treatment"]:
-            chemi_id.append(get_chemi_id(treatment, llm))
-        llm_output["treatment_ID"] = chemi_id if chemi_id else "None"
+            chebi.append(get_chemi_id(treatment, llm))
+        if chebi:
+            llm_output["treatment_ID"] = [entry[0] for entry in chebi]
+            llm_output["treatment_AsciiName"] = [entry[1] for entry in chebi]
     else:
         llm_output["treatment"] = ["Timeout occurred"]
 
@@ -128,7 +130,8 @@ def complete_retrieval(llm_output):
         print("\nCSV file not found. Creating a new file.")
         df = pd.DataFrame(columns=["Puplication_database", "Study_identifier",
                                 "DOI","Year_of_publication", "Authors", 
-                                "Study_title", "disease", "treatment","gene",
+                                "Study_title", "disease", "treatment",
+                                "treatment_AsciiName", "gene",
                                 "ORDO_code","treatment_ID"])
         
     new_row = {
@@ -140,6 +143,7 @@ def complete_retrieval(llm_output):
         "Study_title" : llm_output["pub_title"] if "pub_title" in llm_output else "None",
         "disease": llm_output["disease"],
         "treatment": llm_output["treatment"],
+        "treatment_AsciiName": llm_output["treatment_AsciiName"] if "treatment_AsciiName" in llm_output else "None",
         "gene": llm_output["gene"] if "gene" in llm_output else "None",  
         "ORDO_code": llm_output["ORDO_code"] if "ORDO_code" in llm_output else "None",
         "treatment_ID": llm_output["treatment_ID"] if "treatment_ID" in llm_output else "None"
@@ -174,11 +178,21 @@ def main():
         True: Continuation with the PDF - document at which the program last stopped.
         False: Starting from the first PDF - document in input directory."""
     )
+    parser.add_argument(
+        '-r','--references', 
+        type=str, 
+        default="False",
+        help="""Can be either set to True or False. 
+        True: The PDF will be processed as it is.
+        False: References section will be stripped before analysis for better results.
+        Only works if PDF containes exaclty one reference section."""
+    )
 
     args = parser.parse_args()
     file_path = args.file
     model = args.model
     keep_progress = args.progression
+    keep_references = args.references
 
     initial_query = """What is the single primary disease addressed in the paper?
     Keep the answer concise and limited to the disease name with its type or subtype, 
@@ -199,7 +213,7 @@ def main():
 
     retrieve_llm, mapping_llm, embedding_model = initialize_server(model)
     file_list = os.listdir(file_path)
-    if keep_progress == "False":
+    if keep_progress != "True":
         progress = {"current_file": None, "restarts" : 0, "output" : {}}
     else:
         progress = load_progress(STATE_FILE)
@@ -211,7 +225,12 @@ def main():
     if progress["restarts"] == MAX_RESTARTS:
         print("---MAXIMUM RESTARTS REACHED---")
         output = progress["output"]
-        analyzer = initialize_retriever(file_path +"/"+ file_list[start_index], embedding_model, retrieve_llm)
+        analyzer = initialize_retriever(
+            file_path +"/"+ file_list[start_index], 
+            embedding_model, 
+            retrieve_llm, 
+            keep_references
+        )
         map_metadata(output, file_path +"/"+ file_list[start_index], analyzer, mapping_llm)
         analyzer.delete_db()
         complete_retrieval(output)
@@ -225,7 +244,12 @@ def main():
     for file in file_list[start_index:]:
         # Initialize output and analyzer
         output = progress.get("output", {})
-        analyzer = initialize_retriever(file_path + "/" + file, embedding_model, retrieve_llm)
+        analyzer = initialize_retriever(
+            file_path + "/" + file, 
+            embedding_model, 
+            retrieve_llm,
+            keep_references
+            )
         
         # Extract "disease"
         disease = extract_information(

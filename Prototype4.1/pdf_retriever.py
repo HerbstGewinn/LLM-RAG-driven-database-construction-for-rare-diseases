@@ -63,9 +63,20 @@ class PDFRetriever:
                 "timeout" : END,
             },
         )
+    
+    def exclude_reference_part(self, text):
+    
+        normalized_text = text.replace("\r\n", "\n").replace("\r", "\n")
+        lines = normalized_text.split("\n")
+        result = []
+        for line in lines:
+            if line.strip().lower() in ["references", "bibliography", "acknowledgments", "acknowledgements"]:
+                break  
+            result.append(line)
         
+        return "\n".join(result).strip()
 
-    def load_pdf(self, embedding_model):
+    def load_pdf(self, embedding_model, keep_references):
        
         try:
             self.document_text = extract_text(self.file_path)
@@ -73,6 +84,9 @@ class PDFRetriever:
         except Exception as e:
             raise RuntimeError(f"---FAILED TO LOAD PDF: {e}---")
         
+        if keep_references == "False":
+            self.document_text = self.exclude_reference_part(self.document_text)
+
         document = Document(page_content=self.document_text)
         text_splitter = RecursiveCharacterTextSplitter(
                                                 chunk_size=self.chunk_size, 

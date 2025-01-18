@@ -149,7 +149,7 @@ def get_chemi_id(treatment, llm):
         answer_content = json.loads(answer.content)
         print(f"---EXTRACTED TREATMENT SUBSTANCE: {answer_content["substance"]}---")
         if answer_content["substance"] == "None": 
-            return None
+            return None, None
     except:
         answer_content = {"substance" : treatment}
     
@@ -163,7 +163,7 @@ def get_chemi_id(treatment, llm):
         if len(best_results) == 1:
             entity = result[0]
             print(f"Best match: ChEBI ID: {entity['chebiId']}, Name: {entity['chebiAsciiName']}, Score: {entity["searchScore"]}")
-            return entity['chebiId']
+            return entity['chebiId'], entity['chebiAsciiName']
         else:
             search_instructions = """
             You are an information extractor tasked with finding the best matching substance in a LIST of substances.
@@ -182,12 +182,12 @@ def get_chemi_id(treatment, llm):
             for idx, name in enumerate(best_results):
                 if name == best_result_content["substance"]:
                     print(f"Best match: ChEBI ID: {result[idx]['chebiId']}, Name: {result[idx]['chebiAsciiName']}, Score: {result[idx]["searchScore"]}")
-                    return result[idx]['chebiId']
-            return result[0]['chebiId']
+                    return result[idx]['chebiId'], result[idx]['chebiAsciiName']
+            return result[0]['chebiId'], result[0]['chebiAsciiName']
 
 
     else:
-        return None
+        return None, None
 
 def get_orpha_code(disease):
     disease_processor = Bert_Orpha_Mapper('en_product1.json')
