@@ -273,11 +273,11 @@ def main():
         output["disease"] = disease
         
         queries = {
-        "treatment": follow_up_querys[0].format(answer=disease_str),
-        "gene": follow_up_querys[1].format(answer=disease_str),
+            "treatment": follow_up_querys[0].format(answer=disease_str),
+            "gene": follow_up_querys[1].format(answer=disease_str),
         }
-
-        print("\n---STARTING PARALLEL EXTRACTION OF TREATMENT AND GENE INFORMATION---")
+    
+        print("\n---Starting parallel extraction of treatment and gene information---".upper())
     
         def parallel_extract(key):
             return extract_information(
@@ -288,11 +288,11 @@ def main():
                 progress=progress,
                 restart_message=f"---{key.upper()} INFORMATION COULD NOT BE EXTRACTED---"
             )
-        
+    
         with ThreadPoolExecutor() as executor:
             # Map keys ("treatment", "gene") to the parallel_extract function
             results = executor.map(parallel_extract, queries.keys())
-        
+    
         # Store the results in the output dictionary
         for key, result in zip(queries.keys(), results):
             output[key] = result
@@ -324,4 +324,3 @@ def validate():
 if __name__ == "__main__":
     main()
     #validate()
-   
