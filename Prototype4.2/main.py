@@ -105,7 +105,7 @@ def map_metadata(llm_output, file_path, analyzer, llm):
         ordo_code = list()
         for diseases in llm_output["disease"]:
             ordo = get_orpha_code(diseases)
-            ordo_code.append(ordo["OrphaCode"] if ordo != "None" else "None")
+            ordo_code.append(ordo["OrphaCode"] if ordo else None)
         llm_output["ORDO_code"] = ordo_code if ordo_code else "None"
     else:
         llm_output["disease"] = ["Timeout occurred"]

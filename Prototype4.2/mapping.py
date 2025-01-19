@@ -194,7 +194,7 @@ def get_orpha_code(disease):
 
     orpha_code = disease_processor.find_orpha_code(disease)
 
-    return orpha_code if orpha_code else "None"
+    return orpha_code if orpha_code else None
 
 #Test cases for the mapping functions
 if __name__ =="__main__":
