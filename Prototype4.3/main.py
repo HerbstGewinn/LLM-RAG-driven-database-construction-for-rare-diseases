@@ -8,6 +8,7 @@ import json
 import sys
 import os
 import argparse
+import time
 
 sys.stdout.reconfigure(encoding='utf-8')
 MAX_RESTARTS = 3
@@ -135,7 +136,7 @@ def complete_retrieval(llm_output):
         print("\nCSV file loaded successfully.")
     except FileNotFoundError:
         print("\nCSV file not found. Creating a new file.")
-        df = pd.DataFrame(columns=["Puplication_database", "Study_identifier",
+        df = pd.DataFrame(columns=["Publication_database", "Study_identifier",
                                 "DOI","Year_of_publication", "Authors", 
                                 "Study_title","Journal","disease_LLM","Clinical_diagnosis_ORDO",
                                 "ORDO_code","HPO_terms_condition","OMIM_code","gene", "treatment",
@@ -143,7 +144,7 @@ def complete_retrieval(llm_output):
         
     new_row = {
         #DATABASE_INFORMATION
-        "Puplication_database" : llm_output["pub_db"] if "pub_db" in llm_output else "None",
+        "Publication_database" : llm_output["pub_db"] if "pub_db" in llm_output else "None",
         "Study_identifier" : llm_output["pub_code"],
         "DOI" : llm_output["pub_doi"] if "pub_doi" in llm_output else "None",
         "Year_of_publication" : llm_output["pub_year"] if "pub_year" in llm_output else "None",
@@ -218,16 +219,19 @@ def main():
     written in full, without any additional details, descriptions, or classifications."""
 
     follow_up_querys = [
-            """The paper addresses the following disease: {answer}.
-            What are the primary treatment option(s) explicitly associated with this disease,
-            as suggested in the paper? Ensure the treatments are stated with precision,
-            avoiding vague terms such as "dietary supplementation" or "pharmaceutical therapy."
-            Include no more than two treatment options.
-            Provide only the name(s) of the treatment(s) without any additional details, descriptions, or dosages.""",
-            """The Paper addresses the following disease: {answer}. 
-            What gene(s) are directly associated with this disease according to the paper?
-            Ensure that only the gene(s) are extracted. 
-            There is no need for additional information, besides the gene(s).""",
+           """The paper addresses the following disease: {answer}.  
+            What are the primary treatment option(s) explicitly associated with this disease, as suggested in the paper?
+            Ensure the treatments are stated with precision, avoiding vague terms such as "dietary supplementation" or "pharmaceutical therapy."  
+            If the treatment involves medications or substances, provide only the name of the substance, with no additional details regarding dosage,
+            administration, or qualifiers such as "intermediate dose" or "therapy." Include only substances for which there is a reported outcome,
+            whether positive or negative. Do not mention placebos under any circumstances.  
+            List only the names of the treatments without any additional information or descriptions. """,
+
+            """The paper discusses the following disease: {answer}.
+            Identify the gene(s) that are directly and specifically associated with this disease according to the paper.
+            Exclude any genes mentioned in introductory or background sections, or those that are only loosely related to the disease.
+            Only extract genes that are central and significant in the main context of the paper's discussion about the disease.
+            Provide only the names of the gene(s), such as: IGF1, TNFA, PPARG, NLGN1. Don’t add any further information""",
             """The Paper addresses the following treatment(s): {treatment}. 
             Evaluate each treatment option's effect and classify it into one of the following categories: 
             n/a, None, small, medium, or large. Return the classification for each treatment separately."""
@@ -367,5 +371,9 @@ def validate():
     validate_db(test_data, vali_data)
 
 if __name__ == "__main__":
+    start_time = time.time()
     main()
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Die Laufzeit des Codes beträgt {elapsed_time:.4f} Sekunden.")
     #validate()
