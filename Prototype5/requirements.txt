@@ -1,0 +1,10 @@
+pdfminer.six
+langchain
+langchain_community
+langgraph
+langchain_ollama
+sentence_transformers
+bioservices
+Bio
+tabulate
+chromadb
