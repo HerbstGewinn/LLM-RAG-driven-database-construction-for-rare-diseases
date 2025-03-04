@@ -110,7 +110,7 @@ class PDFRetriever:
         self.custom_llm = llm
        
         self.retriever = MultiQueryRetriever.from_llm(
-            retriever=self.vector_db.as_retriever(search_type="mmr"),
+            retriever=self.vector_db.as_retriever(),
             llm=self.custom_llm)
         
         print("---RETRIEVAL INITIALIZED SUCCESSFULLY---")
