@@ -1,4 +1,8 @@
-# RAG-Driven Document Analysis System
+# LLM-RAG-driven-database-construction-for-rare-diseases
+This is a semester project of computational systems biology for the Bioinformatics Masters
+
+
+
 
 ## **Overview**
 This project implements a Retrieval-Augmented Generation (RAG) pipeline designed to analyze PDF documents and extract key metadata, such as diseases, treatments, associated genes, and publication details. The pipeline integrates a vector database, LLM-based processing, and metadata validation to ensure accurate extraction and consistency.
