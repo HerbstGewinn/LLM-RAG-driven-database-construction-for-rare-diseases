@@ -19,7 +19,7 @@ This project implements a Retrieval-Augmented Generation (RAG) pipeline designed
    - Generates precise and context-aware answers using LLMs.
    
 3. **Metadata Mapping**:
-   - Extracts and maps publication metadata (e.g., DOI, authors, journal name) and disease-related information like ORDO codes and ChEBI IDs.
+   - Extracts and maps publication metadata (e.g., DOI, authors, journal name) and disease-related information like ORDO codes, OMIM codes and ChEBI IDs.
 
 4. **Validation Pipeline**:
    - Ensures answers align with the facts from the document and validates extracted metadata for correctness (see `graph.png`).
@@ -39,7 +39,9 @@ This project implements a Retrieval-Augmented Generation (RAG) pipeline designed
    Visit https://www.orphadata.com/alignments/ and download the `en_product1.json` file. 
    This file must be in the programs directory. 
 3. Visit https://hpo.jax.org/data/annotations and download the HPO Annotations. 
-   This file must be in the programs directory. 
+   This file must be in the programs directory.
+4. Visit https://www.omim.org/downloads/, fill out the download request form and wait for the conformation link. Afterward download the `morbidmap.txt`. This file must be in the programs directory. 
+
 
 ## **Usage**
 
@@ -53,7 +55,6 @@ Run the program using the following arguments:
 ## **Outputs**
 
 1. Extracted metadata and disease-related information are saved in a CSV file (`test_db.csv`).
-2. Results are validated against a reference dataset (`validation_data.csv`).
 
 ## **File structure**
 
