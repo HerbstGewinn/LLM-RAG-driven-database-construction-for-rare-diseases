@@ -61,7 +61,6 @@ Run the program using the following arguments:
 - ├── pdf_retriever.py            --> PDF loading, text splitting, and retrieval logic
 - ├── llm_access.py               --> Functions for LLM server connection and initialization
 - ├── mapping.py                  --> Metadata mapping and enrichment
-- ├── validation.py               --> Validation output for extracted data
 - ├── graph_state.py              --> State variables of the langgraph
 - ├── requirements.txt            --> Python dependencies
 
